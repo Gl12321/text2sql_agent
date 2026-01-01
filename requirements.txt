@@ -1,0 +1,15 @@
+pydantic-settings==2.2.1
+python-dotenv==1.0.1
+
+sqlalchemy==2.0.29
+asyncpg==0.29.0
+psycopg2-binary==2.9.9
+
+datasets==2.18.0
+pandas==2.2.2
+
+langchain==0.1.16
+langchain-core==0.1.45
+langchain-community==0.0.34
+
+llama-cpp-python==0.2.62
