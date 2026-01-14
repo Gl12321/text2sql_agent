@@ -36,8 +36,53 @@ class SpiderETL:
                 zip_ref.extractall(self.raw_data_dir)
 
     def migrate_database(self, db_id: str):
+        schema = db_id.lower()
+        sqlite_file = os.path.join(self.raw_data_dir, "spider", "database", db_id, f"{db_id}.sqlite")
 
+        logger.info(f"--- Миграция {schema} с ключами ---")
 
+        with self.pg_engine.connect() as conn:
+            conn.execute(text(f"CREATE SCHEMA IF NOT EXISTS {schema}"))
+            conn.commit()
+
+        with sqlite3.connect(sqlite_file) as sqlite_conn:
+            cursor = sqlite_conn.cursor()
+            cursor.execute("SELECT name FROM sqlite_master WHERE type='table';")
+            tables = [t[0] for t in cursor.fetchall() if t[0] != 'sqlite_sequence']
+
+            for table in tables:
+                df = pd.read_sql_query(f'SELECT * FROM "{table}"', sqlite_conn)
+                df.columns = [c.lower() for c in df.columns]
+                df.to_sql(name=table.lower(), con=self.pg_engine, schema=schema, if_exists="replace", index=False)
+                logger.info(f"  [{schema}.{table.lower()}] Данные загружены")
+
+            with self.pg_engine.connect() as pg_conn:
+                for table in tables:
+                    t_low = table.lower()
+
+                    cursor.execute(f"PRAGMA table_info('{table}')")
+                    pks = [row[1].lower() for row in cursor.fetchall() if row[5] > 0]
+
+                    if pks:
+                        pg_conn.execute(text(f'ALTER TABLE {schema}."{t_low}" ADD PRIMARY KEY ({", ".join(pks)})'))
+
+                    cursor.execute(f"PRAGMA foreign_key_list('{table}')")
+                    fks = cursor.fetchall()
+
+                    for fk in fks:
+                        target_t = fk[2].lower()
+                        from_c = fk[3].lower()
+                        to_c = fk[4].lower()
+                        fk_name = f"fk_{t_low}_{from_c}"
+
+                        pg_conn.execute(text(f"""
+                            ALTER TABLE {schema}."{t_low}" 
+                            ADD CONSTRAINT {fk_name} 
+                            FOREIGN KEY ({from_c}) REFERENCES {schema}."{target_t}"({to_c})
+                        """))
+
+                pg_conn.commit()
+                logger.info(f"--- Схема {schema} полностью структурирована ---")
 
     def run(self, dbs):
         # self._download_file()
