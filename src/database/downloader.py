@@ -28,7 +28,7 @@ class DatasetProvider:
             return
 
         logger.info("Extracting raw data")
-        with zipfile.ZipFile(self.zip_path 'r') as zip:
+        with zipfile.ZipFile(self.zip_path, 'r') as zip:
             zip.extractall(self.raw_data_dir)
         logger.info("Extracted raw data")
 
