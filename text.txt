@@ -1,62 +1,76 @@
-import sqlite3
-import pandas as pd
-from sqlalchemy import create_engine, text
+import chromadb
+from typing import Any, Optional
 from src.core.logger import setup_logger
+from pathlib import Path
 
-logger = setup_logger("spider_migrator")
+logger = setup_logger("retriever")
 
-class SpiderMigrator:
-    def __init__(self, settings, provider):
-        self.settings = settings
-        self.provider = provider
-        # Используем синхронный движок для миграций (DDL операции)
-        self.pg_engine = create_engine(self.settings.db_url_sync)
+class SchemaRetriever:
+    def __init__(self, path: str = "./data/chroma_db"):
+        """
+        Инициализация локального векторного хранилища.
+        """
+        # Гарантируем наличие папки для БД
+        Path(path).mkdir(parents=True, exist_ok=True)
 
-    def migrate_db(self, db_id):
-        schema = db_id.lower()
-        sqlite_path = self.provider.get_sql_path(db_id)
+        self.client = chromadb.PersistentClient(path=path)
 
-        # 1. Создание изолированного пространства (Schema)
-        with self.pg_engine.connect() as conn:
-            conn.execute(text(f"CREATE SCHEMA IF NOT EXISTS {schema}"))
-            conn.commit()
+        # Коллекция для DDL (строки для LLM)
+        self.table_collection = self.client.get_or_create_collection(
+            name="tables_detailed",
+            metadata={"hnsw:space": "cosine"}
+        )
 
-        # 2. Перенос данных через SQLite сокет
-        with sqlite3.connect(sqlite_path) as sqlite_conn:
-            cursor = sqlite_conn.cursor()
-            # Получаем список всех таблиц в файле
-            cursor.execute("SELECT name FROM sqlite_master WHERE type='table';")
-            tables = [t[0] for t in cursor.fetchall() if t[0] != 'sqlite_sequence']
+        # Коллекция для саммари схем (на будущее)
+        self.schema_collection = self.client.get_or_create_collection(
+            name="schemas_summary",
+            metadata={"hnsw:space": "cosine"}
+        )
 
-            for table in tables:
-                # Читаем из файла в RAM, затем пишем в сетевой сокет Postgres
-                df = pd.read_sql_query(f'SELECT * FROM "{table}"', sqlite_conn)
-                df.columns = [c.lower() for c in df.columns] # Приводим к нижнему регистру
-                df.to_sql(name=table.lower(), con=self.pg_engine, schema=schema, if_exists="replace", index=False)
-                logger.info(f"Таблица {schema}.{table.lower()} перенесена")
+    def add_tables(
+        self,
+        db_id: str,
+        table_names: list[str],
+        documents: list[str],
+        embeddings: list[list[float]]
+    ):
+        """
+        Запись подготовленных данных в ChromaDB.
+        :param db_id: Индекс схемы (напр. 'bike_1').
+        :param table_names: Список имен таблиц.
+        :param documents: Список строк от Serializer (готовый текст для LLM).
+        :param embeddings: Список векторов от Embedder.
+        """
+        ids = [f"{db_id}.{name}" for name in table_names]
+        metadatas = [{"db_id": db_id, "table_name": name} for name in table_names]
 
-            # 3. Восстановление метаданных (Ключи и связи)
-            self._apply_constraints(schema, tables, cursor)
+        self.table_collection.add(
+            ids=ids,
+            embeddings=embeddings,
+            documents=documents, # Здесь лежат строки для промпта
+            metadatas=metadatas
+        )
+        logger.info(f"Successfully indexed {len(ids)} tables for schema: {db_id}")
 
-    def _apply_constraints(self, schema, tables, sqlite_cursor):
-        with self.pg_engine.connect() as pg_conn:
-            for table in tables:
-                t_low = table.lower()
+    def search_tables(
+        self,
+        query_embedding: list[float],
+        db_id: Optional[str] = None,
+        top_k: int = 5
+    ) -> list[dict[str, Any]]:
+        """
+        Поиск релевантных таблиц.
+        """
+        search_filter = {"db_id": db_id} if db_id else None
 
-                # Извлекаем Primary Keys из SQLite
-                sqlite_cursor.execute(f"PRAGMA table_info('{table}')")
-                pks = [row[1].lower() for row in sqlite_cursor.fetchall() if row[5] > 0]
-                if pks:
-                    pg_conn.execute(text(f'ALTER TABLE {schema}."{t_low}" ADD PRIMARY KEY ({", ".join(pks)})'))
+        results = self.table_collection.query(
+            query_embeddings=[query_embedding],
+            n_results=top_k,
+            where=search_filter
+        )
 
-                # Извлекаем Foreign Keys
-                sqlite_cursor.execute(f"PRAGMA foreign_key_list('{table}')")
-                for fk in sqlite_cursor.fetchall():
-                    target_t, from_c, to_c = fk[2].lower(), fk[3].lower(), fk[4].lower()
-                    pg_conn.execute(text(f"""
-                        ALTER TABLE {schema}."{t_low}"
-                        ADD CONSTRAINT fk_{t_low}_{from_c}
-                        FOREIGN KEY ({from_c}) REFERENCES {schema}."{target_t}"({to_c})
-                    """))
-            pg_conn.commit()
-            logger.info(f"Связи для схемы {schema} восстановлены")
+        # Формируем компактный результат для Cataloger/Agent
+        return [
+            {"content": doc, "metadata": meta}
+            for doc, meta in zip(results["documents"][0], results["metadatas"][0])
+        ]
