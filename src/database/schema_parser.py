@@ -57,7 +57,7 @@ if __name__ == "__main__":
             logger.info(f"Analyzing schema: {test_schema}")
             ddl = await parser.get_ddl_of_schema(test_schema)
 
-            print(f"Structure for {test_schema}: {list(ddl.keys())}")
+            print(f"Structure for {test_schema}: {ddl}")
 
 
     asyncio.run(main())
