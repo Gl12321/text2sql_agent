@@ -1,76 +1,69 @@
-import chromadb
-from typing import Any, Optional
+import asyncio
+from src.database.schema_parser import SchemaParser
+from src.rag.cataloger import SchemaCataloger
+from src.rag.retriver import Retriver
+from src.rag.embedder import TableEmbedder
 from src.core.logger import setup_logger
-from pathlib import Path
 
-logger = setup_logger("retriever")
+logger = setup_logger("ExpertTest")
 
-class SchemaRetriever:
-    def __init__(self, path: str = "./data/chroma_db"):
-        """
-        Инициализация локального векторного хранилища.
-        """
-        # Гарантируем наличие папки для БД
-        Path(path).mkdir(parents=True, exist_ok=True)
+async def expert_rag_test():
+    parser = SchemaParser()
+    cataloger = SchemaCataloger()
+    retriver = Retriver()
+    embedder = TableEmbedder()
 
-        self.client = chromadb.PersistentClient(path=path)
+    # --- ШАГ 1: Валидация переноса данных ---
+    logger.info("Step 1: Validating Data Migration...")
 
-        # Коллекция для DDL (строки для LLM)
-        self.table_collection = self.client.get_or_create_collection(
-            name="tables_detailed",
-            metadata={"hnsw:space": "cosine"}
-        )
+    # Получаем список всех схем и таблиц из Postgres
+    all_schemas = await parser.get_all_schemas()
+    postgres_stats = {}
+    for schema in all_schemas:
+        tables = await parser.get_ddl_of_schema(schema)
+        postgres_stats[schema] = len(tables)
 
-        # Коллекция для саммари схем (на будущее)
-        self.schema_collection = self.client.get_or_create_collection(
-            name="schemas_summary",
-            metadata={"hnsw:space": "cosine"}
-        )
+    # Запускаем индексацию
+    await cataloger.index_all_schems()
 
-    def add_tables(
-        self,
-        db_id: str,
-        table_names: list[str],
-        documents: list[str],
-        embeddings: list[list[float]]
-    ):
-        """
-        Запись подготовленных данных в ChromaDB.
-        :param db_id: Индекс схемы (напр. 'bike_1').
-        :param table_names: Список имен таблиц.
-        :param documents: Список строк от Serializer (готовый текст для LLM).
-        :param embeddings: Список векторов от Embedder.
-        """
-        ids = [f"{db_id}.{name}" for name in table_names]
-        metadatas = [{"db_id": db_id, "table_name": name} for name in table_names]
+    # Проверяем наполнение ChromaDB
+    for schema, expected_count in postgres_stats.items():
+        # Прямой запрос к коллекции для проверки количества записей
+        results = retriver.table_collection.get(where={"db_id": schema})
+        actual_count = len(results['ids'])
 
-        self.table_collection.add(
-            ids=ids,
-            embeddings=embeddings,
-            documents=documents, # Здесь лежат строки для промпта
-            metadatas=metadatas
-        )
-        logger.info(f"Successfully indexed {len(ids)} tables for schema: {db_id}")
+        if actual_count == expected_count:
+            logger.info(f"✔ Schema '{schema}': Matches! (Postgres: {expected_count}, Chroma: {actual_count})")
+        else:
+            logger.error(f"✖ Schema '{schema}': Mismatch! (Postgres: {expected_count}, Chroma: {actual_count})")
 
-    def search_tables(
-        self,
-        query_embedding: list[float],
-        db_id: Optional[str] = None,
-        top_k: int = 5
-    ) -> list[dict[str, Any]]:
-        """
-        Поиск релевантных таблиц.
-        """
-        search_filter = {"db_id": db_id} if db_id else None
+    # --- ШАГ 2: Тест семантического поиска (Semantic Accuracy) ---
+    logger.info("\nStep 2: Testing Semantic Search Accuracy...")
 
-        results = self.table_collection.query(
-            query_embeddings=[query_embedding],
-            n_results=top_k,
-            where=search_filter
-        )
+    # Выбираем одну схему для теста (например, первую)
+    if not all_schemas:
+        return
+    test_db = all_schemas[0]
 
-        # Формируем компактный результат для Cataloger/Agent
-        return [
-            {"content": doc, "metadata": meta}
-            for doc, meta in zip(results["documents"][0], results["metadatas"][0])
-        ]
+    # Тестовый запрос, который явно должен вести к одной из таблиц
+    # Если в базе есть таблица 'orders', ищем 'sales and transactions'
+    test_query = "information about orders and customer transactions"
+    query_vector = embedder.get_embeddings([test_query])[0]
+
+    search_results = retriver.search_tables(
+        query_embedding=query_vector,
+        db_id=test_db,
+        top_k=2
+    )
+
+    if search_results:
+        logger.info(f"✔ Search for '{test_db}' returned {len(search_results)} documents.")
+        for i, doc in enumerate(search_results):
+            # Твой search_tables возвращает results["documents"][0]
+            # Это список строк DDL
+            logger.info(f"Top-{i+1} result snippet: {doc[:150]}...")
+    else:
+        logger.error(f"✖ Search returned NO results for schema '{test_db}'")
+
+if __name__ == "__main__":
+    asyncio.run(expert_rag_test())
