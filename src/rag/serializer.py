@@ -12,8 +12,9 @@ class TableSerializer:
             cols.append(base)
 
         doc = [
-            f"schema: {table_metadata["schema"]}",
-            f"Table: {table_metadata['name']}",
+            f"schema: {table_metadata['schema_name']}",
+            # ИСПРАВЛЕНО: 'name' -> 'table_name'
+            f"Table: {table_metadata['table_name']}",
             f"Columns: {', '.join(cols)}"
         ]
 
@@ -28,5 +29,5 @@ class TableSerializer:
                 fks.append(f"{constrained} -> {fk['referred_table']}.{referred}")
             doc.append(f"Foreign keys: {', '.join(fks)}")
 
-        logger.info(f"Serialized table {table_metadata["name"]}")
+        logger.info(f"Serialized table {table_metadata['table_name']}")
         return '\n'.join(doc)

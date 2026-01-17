@@ -29,7 +29,8 @@ class SchemaParser:
             schema_metadata = {}
             for table in tables:
                 table_info = {}
-                table_info["name"] = table
+                table_info["schema_name"] = schema_name
+                table_info["table_name"] = table
                 table_info["columns"] = inspector.get_columns(table, schema=schema_name)
 
                 pk_info = inspector.get_pk_constraint(table, schema=schema_name)
