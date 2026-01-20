@@ -4,12 +4,14 @@ from src.database.schema_parser import SchemaParser
 from src.core.logger import setup_logger
 from src.rag.embedder import TableEmbedder
 from src.rag.serializer import TableSerializer
+from src.core.config import get_settings
 
+
+config = get_settings()
 logger = setup_logger("Cataloger")
 
-
 class SchemaCataloger:
-    def __init__(self, db_path="/home/stanislav/Enterprice_SQL_agent/data"): #заменить абсолютный путь
+    def __init__(self, db_path=config.VECTOR_DB_PATH):
         self.schema_parser = SchemaParser()
         self.table_embedder = TableEmbedder()
         self.table_serializer = TableSerializer()
@@ -53,21 +55,21 @@ class SchemaCataloger:
 
         for table_info in metadata_dict.values():
             name = table_info["table_name"]
-            table_names.append(name)
+            column_names = [col["name"] for col in table_info["columns"]]
 
+            table_names.append(name)
             document = self.table_serializer(table_info)
             documents_of_ddl.append(document)
 
             metadatas.append({
                 "db_id": db_id,
-                "table_name": name
+                "table_name": name,
+                "column_names": ",".join(column_names)
             })
 
         embeddings = self.table_embedder.get_embeddings(documents_of_ddl)
-
         self.add_tables_to_store(db_id, table_names, documents_of_ddl, embeddings, metadatas)
         logger.info(f"Successfully indexed {len(table_names)} tables for {db_id}")
-
     async def index_all_schemas(self):
         schemes = await self.schema_parser.get_all_schemas()
         for schema in schemes:

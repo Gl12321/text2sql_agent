@@ -13,8 +13,9 @@ class Settings(BaseSettings):
     DB_PORT: int = 5432
     DB_NAME: str
 
-    MODEL_PATH: str = "./models/model.gguf"
-
+    VECTOR_DB_PATH: str = str(BASE_DIR / "data")
+    MODEL_PATH: str = str(BASE_DIR / "models" / "Meta-Llama-3-8B-Instruct.Q4_K_M.gguf")
+    
     model_config = SettingsConfigDict(
         env_file=ENV_FILE,
         env_file_encoding='utf-8',

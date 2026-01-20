@@ -3,7 +3,7 @@ from src.database.postgres_client import async_db
 
 class SQLExecutor:
     def __init__(self):
-        self.engine = async_db().engine
+        self.engine = async_db.engine
 
     async def execute(self, sql_query):
         try:

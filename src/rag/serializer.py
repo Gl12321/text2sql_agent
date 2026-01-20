@@ -13,7 +13,6 @@ class TableSerializer:
 
         doc = [
             f"schema: {table_metadata['schema_name']}",
-            # ИСПРАВЛЕНО: 'name' -> 'table_name'
             f"Table: {table_metadata['table_name']}",
             f"Columns: {', '.join(cols)}"
         ]

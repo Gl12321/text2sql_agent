@@ -1,4 +1,5 @@
 from typing import Any
+from src.llm.wrapper import LLMWrapper
 from langchain_core.runnables import RunnablePassthrough, RunnableLambda
 from langchain_core.output_parsers import StrOutputParser
 from langchain_core.documents import Document
@@ -23,6 +24,7 @@ def create_sql_chain(llm_wrapper, retriever, prompt_manager):
             | RunnableLambda(_parse_retrieval_output)
     )
 
+    llm_wrapper = LLMWrapper()
     full_chain = (
             {
                 "data": retrieval_chain,
