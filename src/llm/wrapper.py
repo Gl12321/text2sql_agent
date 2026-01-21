@@ -30,6 +30,7 @@ class LLMWrapper:
             "n_batch": 1024,
             "verbose": False,
             "n_gpu_layers": 0,
+            "n_threads": 5
         }
 
     def get_chain(self, tables, columns):
