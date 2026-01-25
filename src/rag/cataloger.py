@@ -23,19 +23,14 @@ class SchemaCataloger:
         )
 
     def add_tables_to_store(
-            self,
-            schema_id: str,
-            table_names: list[str],
-            documents_of_ddl: list[str],
-            embeddings: list[list[float]],
-            metadatas: list[dict]
+            self,schema_id, table_names, documents_of_ddl, embeddings, metadatas
     ):
         ids = [f"{schema_id}.{name}" for name in table_names]
         self.table_collection.upsert(
             ids=ids,
             embeddings=embeddings,
             documents=documents_of_ddl,
-            metadatas=metadatas
+            metadatas=metadatas,
         )
         logger.info(f"Successfully upserted {len(table_names)} tables to ChromaDB for: {schema_id}")
 
@@ -46,7 +41,7 @@ class SchemaCataloger:
 
         table_names = []
         documents_of_ddl = []
-        documents_for_embedder = []
+        serialized_tables = []
         metadatas = []
 
         for table_info in metadata_dict.values():
@@ -56,16 +51,18 @@ class SchemaCataloger:
 
             document = await self.schema_parser.get_ddl(schema_id, name)
             documents_of_ddl.append(document)
-            documents_for_embedder.append(self.table_serializer(table_info))
+            serialized_table = self.table_serializer(table_info)
+            serialized_tables.append(serialized_table)
 
             metadatas.append({
                 "schema_id": schema_id,
                 "table_name": name,
-                "column_names": ",".join(column_names)
+                "column_names": ",".join(column_names),
+                "serialized_table": serialized_table
             })
 
-        embeddings = self.table_embedder.get_embeddings(documents_for_embedder)
-        self.add_tables_to_store(schema_id, table_names, documents_of_ddl, embeddings, metadatas)
+        embeddings = self.table_embedder.get_embeddings(serialized_tables)
+        self.add_tables_to_store(schema_id, table_names, documents_of_ddl, embeddings, serialized_tables, metadatas)
 
         logger.info(f"Successfully indexed {len(table_names)} tables for {schema_id}")
 
