@@ -21,3 +21,12 @@ class TableEmbedder:
             cache_folder=cache_path
         )
         logger.info("Model loaded")
+
+    def get_embeddings(self, serialized_tables):
+        embeddings = self.model.encode(
+            serialized_tables,
+            normalize_embeddings=True,
+            show_progress_bar=False
+        )
+
+        return embeddings
