@@ -7,7 +7,7 @@ logger = setup_logger("LangGraph")
 class AgentState(TypedDict):
     question: str
     tables: list[str]
-    all_columns: list[str]
+    schema_mapping: dict[str, list[str]]
     db_id: str
     ddls_context: list[str]
     prompt: str
@@ -70,23 +70,26 @@ class SQLAgentGraph:
 
         docs = await self.retriever.ainvoke(question)
         tables = []
-        columns = []
+        schema_mapping = {}
         ddls_context = []
         db_id = None
-
-        logger.info(f"retriever found tables: {tables}")
 
         for doc in docs:
             meta = doc.metadata
             tables.append(meta.get("table_name"))
-            columns.extend((meta.get("column_names")).split(","))
+            cols = [c.strip() for c in doc.metadata.get("column_names", "").split(",")]
+            schema_mapping[meta.get("table_name")] = cols
             db_id = meta.get("db_id")
 
             ddls_context.append(doc.page_content)
+            
+        logger.info(f"retriever found tables: {tables}")
+        logger.info(f"grammar size: {len(schema_mapping.keys())}")
 
         return {
             "tables": tables,
-            "all_columns": list(set(columns)),
+            # "all_columns": list(set(columns)),
+            "schema_mapping": schema_mapping,
             "db_id": db_id,
             "ddls_context": ddls_context,
         }
@@ -95,19 +98,19 @@ class SQLAgentGraph:
         question = state["question"]
         retrieved_ddls = state["ddls_context"]
         prompt = self.prompt_manager.build_sql_prompt(question, retrieved_ddls)
-
+        
+        logger.info(f"Prompt length in chars: {len(prompt)}")
         logger.info(f"Created  prompt: {prompt}")
 
         return {"prompt": prompt}
 
     async def llm_node(self, state: AgentState):
-        columns_for_grammar = state["all_columns"]
-        tables_name_for_grammar = state["tables"]
+        schema_mapping = state["schema_mapping"]
         prompt = state["prompt"]
 
         logger.info("Getting started of llm")
 
-        llm = self.llm_wrapper.get_chain(tables_name_for_grammar, columns_for_grammar)
+        llm = self.llm_wrapper.get_chain(schema_mapping)
         query = await llm.ainvoke(prompt)
 
         logger.info(f"Generated query: {query}")
@@ -139,7 +142,11 @@ class SQLAgentGraph:
         context = state["ddls_context"]
         error_query = state["error_query"]
         error_from_db = state["error_from_db"]
-        corrected_prompt = await self.corrector.correct(context, error_query, error_from_db)
+        question = state["question"]
+        
+        logger.info(f" Error from db: {state["error_from_db"]}")
+        
+        corrected_prompt = await self.corrector.correct(context, error_query, error_from_db, question)
 
         return {"prompt": corrected_prompt}
 

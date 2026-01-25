@@ -5,39 +5,57 @@ from src.rag.embedder import TableEmbedder
 from langchain_core.documents import Document
 from src.core.config import get_settings
 from src.llm.wrapper import LLMWrapper
+from src.llm.graph import SQLAgentGraph
+from src.agent.executor import SQLExecutor
+from src.agent.corrector import SQLCorrector
+import asyncio
 import chromadb
 
 
 logger = setup_logger("test")
 config = get_settings()
 test_db = "college_2"
-def t_llm():
-    queries = ["Find the names of all students in the Comp. Sci. department",
+
+async def t_graph():
+    test_questions_1 = ["Find the names of all students in the Comp. Sci. department",
               "Find the names and salaries of instructors who earn more than 70000",
               "Count the number of courses in each department"]
+    test_questions_2 = [
+        "Find the titles of courses and the names of departments that offer them.",
+        "List the names of students and the names of their advisors.",
+        "Find the names of students who took courses in the 'Watson' building."
+    ]
+    test_questions_3 = [
+        "Find the names of all students in the Comp. Sci. department",
+        "Find the names of students who took courses in the 'Watson' building."
+    ]
+
     prompt_manager = PromptManager()
     embedder = TableEmbedder()
     client = chromadb.PersistentClient(config.VECTOR_DB_PATH)
     collection = client.get_collection("tables")
     retriever = TableRetriever(collection=collection, embedder=embedder, db_id=test_db, top_k=4)
+    executor = SQLExecutor()
+    corrector = SQLCorrector()
     wrapper = LLMWrapper()
 
-    for i, query in enumerate(queries):
-        logger.info(f"query {i+1}: {query}")
+    agent = SQLAgentGraph(retriever, prompt_manager, wrapper, executor, corrector)
 
-        results_of_retriver = retriever.invoke(query)
-        tables = [doc.metadata.get("table_name") for doc in results_of_retriver]
-        raw_cols = [doc.metadata.get("column_names", "") for doc in results_of_retriver]
-        columns = list(set(c.strip() for s in raw_cols for c in s.split(",") if c))
-        logger.info(f"found tables: {' '.join(tables)} columns: {columns}")
+    for i, question in enumerate(test_questions_3):
+        logger.info(f"query {i+1}: {question}")
 
-        prompt = prompt_manager.build_sql_prompt(query, results_of_retriver)
-        logger.info(f"Full prompt:\n{prompt}")
-        
-        llm = wrapper.get_chain(tables=tables, columns=columns)
-        sql_query = llm.invoke(prompt)
-        logger.info(f"result of llm {sql_query}")
-        
+        initial_state = {
+            "question": question,
+            "db_id": test_db,
+            "retry_count": 0
+        }
+
+        final_state = await agent.graph.ainvoke(initial_state)
+        logger.info(f"Question: {question}")
+        logger.info(f"SQL: {final_state.get('query')}")
+        logger.info(f"Status: {final_state.get('status')}")
+        logger.info(f"Result: {final_state.get('result_from_db')}")
+
 if __name__ == "__main__":
-    t_llm()
+    asyncio.run(t_graph())
     

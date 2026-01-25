@@ -6,10 +6,15 @@ URL = "http://127.0.0.1:8000/ask"
 
 
 def test_api():
-    test_queries = [
+    test_queries_1 = [
         "Find the names of all students in the Comp. Sci. department",
         "Find the names and salaries of instructors who earn more than 70000",
         "Count the number of courses in each department"
+    ]
+    test_queries_2 = [
+        "Find the titles of courses and the names of departments that offer them."
+        "List the names of students and the names of their advisors."
+        "Find the names of students who took courses in the 'Watson' building."
     ]
 
     for question in test_queries:
