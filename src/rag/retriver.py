@@ -6,16 +6,17 @@ from langchain_core.callbacks import CallbackManagerForRetrieverRun
 class TableRetriever(BaseRetriever):
     collection: Any
     embedder: Any
-    db_id: str
+    schemas_id: list[str]
     top_k: int = 2
 
     def _get_relevant_documents(self, query: str, *, run_manager: CallbackManagerForRetrieverRun):
         query_embedding = self.embedder.get_embeddings([query])[0]
+        filter_schemas = {"schema_id": {"$in": self.schemas_id}}
 
         results = self.collection.query(
             query_embeddings=[query_embedding],
             n_results=self.top_k,
-            where={"db_id": self.db_id}
+            where=filter_schemas,
         )
 
         documents = []

@@ -17,7 +17,6 @@ class SQLGrammarBuilder:
             col_list_str = " | ".join([f'"{col}"' for col in columns])
             table_specific_rules.append(f'{rule_name} ::= {col_list_str}')
             
-            # Строгая привязка: "Table"."ColOfThisTable"
             qualified_pairs.append(f'("{table}" "." {rule_name})')
             all_unique_cols.update(columns)
 

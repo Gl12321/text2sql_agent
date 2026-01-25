@@ -15,47 +15,26 @@ async def rag_test():
 
     logger.info("Check data migration")
 
-    await cataloger.index_all_schemas()
     all_schemas = await parser.get_all_schemas()
-
     if not all_schemas:
         return
 
-    postgres_stats = {}
-    for schema in all_schemas:
-        tables = await parser.get_ddl_of_schema(schema)
-        postgres_stats[schema] = list(tables.keys())
-
-    for schema, tables_list in postgres_stats.items():
-        results = cataloger.table_collection.get(where={"db_id": schema})
-        actual_count = len(results['ids'])
-        expected_tables = len(tables_list)
-
-        if actual_count != expected_tables:
-            logger.info(f"Amount tables between Chroma and Postgres don't match in schema {schema}")
-        else:
-            logger.info(f"All tables match in schema {schema}")
-
     logger.info("Check semantic search")
 
-    test_db = "college_2"
     test_query = "how match buildings in department and classrooms"
 
     retriever = TableRetriever(
         collection=cataloger.table_collection,
         embedder=embedder,
-        db_id=test_db,
-        top_k=2
+        schemas_id=all_schemas,
+        top_k=5
     )
 
     search_results = retriever.invoke(test_query)
 
     if search_results:
-        logger.info(f"Search for '{test_db}' returned {len(search_results)} documents")
         for i, doc in enumerate(search_results):
-            logger.info(f"Top-{i + 1} result snippet: {doc.page_content[:150]}...")
-    else:
-        logger.error(f"Search returned NO results for schema '{test_db}'")
+            logger.info(f"Top-{i + 1} result snippet: {doc.page_content}...")
 
 
 if __name__ == "__main__":

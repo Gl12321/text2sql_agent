@@ -21,31 +21,26 @@ class SchemaCataloger:
             name="tables",
             metadata={"hnsw:space": "cosine"}
         )
-        # ДОПИСАТЬ ПОИСК ПО СХЕМАМ С РЕРАНКЕРОМ
-        self.shema_collection = self.client.get_or_create_collection(
-            name="schemes",
-            metadata={"hnsw:space": "cosine"}
-        )
 
     def add_tables_to_store(
             self,
-            db_id: str,
+            schema_id: str,
             table_names: list[str],
             documents_of_ddl: list[str],
             embeddings: list[list[float]],
             metadatas: list[dict]
     ):
-        ids = [f"{db_id}.{name}" for name in table_names]
+        ids = [f"{schema_id}.{name}" for name in table_names]
         self.table_collection.upsert(
             ids=ids,
             embeddings=embeddings,
             documents=documents_of_ddl,
             metadatas=metadatas
         )
-        logger.info(f"Successfully upserted {len(table_names)} tables to ChromaDB for: {db_id}")
+        logger.info(f"Successfully upserted {len(table_names)} tables to ChromaDB for: {schema_id}")
 
-    async def index_schema(self, db_id):
-        metadata_dict = await self.schema_parser.get_ddl_of_schema(db_id)
+    async def index_schema(self, schema_id):
+        metadata_dict = await self.schema_parser.get_ddl_of_schema(schema_id)
         if not metadata_dict:
             return
 
@@ -62,15 +57,31 @@ class SchemaCataloger:
             documents_of_ddl.append(document)
 
             metadatas.append({
-                "db_id": db_id,
+                "schema_id": schema_id,
                 "table_name": name,
                 "column_names": ",".join(column_names)
             })
 
         embeddings = self.table_embedder.get_embeddings(documents_of_ddl)
-        self.add_tables_to_store(db_id, table_names, documents_of_ddl, embeddings, metadatas)
-        logger.info(f"Successfully indexed {len(table_names)} tables for {db_id}")
+        self.add_tables_to_store(schema_id, table_names, documents_of_ddl, embeddings, metadatas)
+
+        logger.info(f"Successfully indexed {len(table_names)} tables for {schema_id}")
+
     async def index_all_schemas(self):
         schemes = await self.schema_parser.get_all_schemas()
         for schema in schemes:
             await self.index_schema(schema)
+
+    def reset_store(self):
+        self.client.delete_collection(name="tables")
+        self.table_collection = self.client.get_or_create_collection(
+            name="tables",
+            metadata={"hnsw:space": "cosine"}
+        )
+        logger.info("Vector store has been reset (collection 'tables' deleted and recreated).")
+
+
+if __name__ == "__main__":
+    cataloger = SchemaCataloger()
+    cataloger.reset_store()
+    asyncio.run(cataloger.index_all_schemas())
