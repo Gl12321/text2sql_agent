@@ -62,7 +62,7 @@ class SchemaCataloger:
             })
 
         embeddings = self.table_embedder.get_embeddings(serialized_tables)
-        self.add_tables_to_store(schema_id, table_names, documents_of_ddl, embeddings, serialized_tables, metadatas)
+        self.add_tables_to_store(schema_id, table_names, documents_of_ddl, embeddings, metadatas)
 
         logger.info(f"Successfully indexed {len(table_names)} tables for {schema_id}")
 
