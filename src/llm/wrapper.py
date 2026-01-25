@@ -18,14 +18,15 @@ logger = setup_logger("wrapper")
 
 class LLMWrapper:
     def __init__(self):
-        self.model_path = get_settings().MODEL_PATH
+        self.model_config = get_settings().MODELS["llm_2"]
+        self.model_path = self.model_config["local_path"]
         model_dir = os.path.dirname(self.model_path)
 
         if not os.path.exists(self.model_path):
             logger.info(f"Downloading model to {self.model_path}")
             hf_hub_download(
-                repo_id="MaziyarPanahi/Meta-Llama-3-8B-Instruct-GGUF",
-                filename="Meta-Llama-3-8B-Instruct.Q4_K_M.gguf",
+                repo_id=self.model_config["repo_id"],
+                filename=self.model_config["filename"],
                 local_dir=model_dir,
                 local_dir_use_symlinks=False
             )
@@ -54,3 +55,7 @@ class LLMWrapper:
                 )
                 
         return llm
+
+
+if __name__ == "__main__":
+    llm = LLMWrapper()

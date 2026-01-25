@@ -1,32 +1,29 @@
-from typing import Any
-from langchain_core.output_parsers import StrOutputParser
-from src.core.logger import setup_logger
+from jinja2 import Template
 
+CORRECTOR_PROMPT_TEMPLATE = """### System:
+You are a PostgreSQL expert. Your previous SQL query failed. 
+Correct it using the context. Output only the SQL query, without explanations.
+
+### Original Question: {{ question }}
+
+### Context (DDL):
+{% for doc in documents %}
+{{ doc }}
+{% endfor %}
+
+### Error Message: {{ error_msg }}
+
+<|eot_id|><|start_header_id|>assistant<|end_header_id|>
+The corrected SQL query is:
+"""
 
 class SQLCorrector:
     def __init__(self):
-        self.template = """### System:
-You are a PostgreSQL expert. Your previous SQL query failed.
-Correct it using the context. Let me remind you that you must display only the information that is written to you in the question. This is incredibly important! When writing a query, you must ensure that the columns you select correspond to their tables. This is very important! Output only SQL.
+        self.template = Template(CORRECTOR_PROMPT_TEMPLATE)
 
-### Original Question:
-{question}
-
-### Context:
-{context}
-
-### Error Message (NEVER REPEAT THIS):
-{error_msg} 
-
-
-### SQL:"""
-
-    async def correct(self, context, failed_sql, error_msg, question):
-        prompt = self.template.format(
-            context=context,
-           # failed_sql=failed_sql,
-            error_msg=error_msg,
+    def build_correction_prompt(self, question, retrieved_ddls, error_msg):
+        return self.template.render(
             question=question,
+            documents=retrieved_ddls,
+            error_msg=error_msg
         )
-
-        return prompt

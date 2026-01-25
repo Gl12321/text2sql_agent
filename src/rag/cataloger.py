@@ -40,21 +40,23 @@ class SchemaCataloger:
         logger.info(f"Successfully upserted {len(table_names)} tables to ChromaDB for: {schema_id}")
 
     async def index_schema(self, schema_id):
-        metadata_dict = await self.schema_parser.get_ddl_of_schema(schema_id)
+        metadata_dict = await self.schema_parser.get_info_of_schema(schema_id)
         if not metadata_dict:
             return
 
         table_names = []
         documents_of_ddl = []
+        documents_for_embedder = []
         metadatas = []
 
         for table_info in metadata_dict.values():
             name = table_info["table_name"]
             column_names = [col["name"] for col in table_info["columns"]]
-
             table_names.append(name)
-            document = self.table_serializer(table_info)
+
+            document = await self.schema_parser.get_ddl(schema_id, name)
             documents_of_ddl.append(document)
+            documents_for_embedder.append(self.table_serializer(table_info))
 
             metadatas.append({
                 "schema_id": schema_id,
@@ -62,7 +64,7 @@ class SchemaCataloger:
                 "column_names": ",".join(column_names)
             })
 
-        embeddings = self.table_embedder.get_embeddings(documents_of_ddl)
+        embeddings = self.table_embedder.get_embeddings(documents_for_embedder)
         self.add_tables_to_store(schema_id, table_names, documents_of_ddl, embeddings, metadatas)
 
         logger.info(f"Successfully indexed {len(table_names)} tables for {schema_id}")

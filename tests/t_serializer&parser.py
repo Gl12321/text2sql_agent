@@ -9,7 +9,7 @@ async def test_flow():
     schemas = await parser.get_all_schemas()
 
     target_schema = schemas[1]
-    ddl_of_schema = await parser.get_ddl_of_schema(target_schema)
+    ddl_of_schema = await parser.get_info_of_schema(target_schema)
 
     data = []
     for table_name, table_meta in ddl_of_schema.items():

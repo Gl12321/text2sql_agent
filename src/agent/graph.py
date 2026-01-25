@@ -7,7 +7,7 @@ logger = setup_logger("LangGraph")
 class AgentState(TypedDict):
     question: str
     tables: list[str]
-    schema_mapping: dict[str, list[str]]
+    schemas_mapping: dict[dict[str, list[str]]]
     db_id: str
     ddls_context: list[str]
     prompt: str
@@ -66,31 +66,30 @@ class SQLAgentGraph:
     async def retriever_node(self, state: AgentState):
         logger.info(f"start search by question: {state['question']}")
 
-        question = state["question"]
-
-        docs = await self.retriever.ainvoke(question)
+        docs = await self.retriever.ainvoke(state["question"])
+                
         tables = []
-        schema_mapping = {}
+        schemas_mapping = {}
         ddls_context = []
-        db_id = None
 
         for doc in docs:
             meta = doc.metadata
-            tables.append(meta.get("table_name"))
-            cols = [c.strip() for c in doc.metadata.get("column_names", "").split(",")]
-            schema_mapping[meta.get("table_name")] = cols
-            db_id = meta.get("db_id")
+            schema_name = meta.get("schema_id")
+            table_name = meta.get("table_name")
+            cols = [c.strip() for c in meta.get("column_names", "").split(",")]
+
+            tables.append(table_name)
+            
+
+            if schema_name not in schemas_mapping:
+                schemas_mapping[schema_name] = {}
+            schemas_mapping[schema_name][table_name] = cols
 
             ddls_context.append(doc.page_content)
-            
-        logger.info(f"retriever found tables: {tables}")
-        logger.info(f"grammar size: {len(schema_mapping.keys())}")
 
         return {
             "tables": tables,
-            # "all_columns": list(set(columns)),
-            "schema_mapping": schema_mapping,
-            "db_id": db_id,
+            "schemas_mapping": schemas_mapping,
             "ddls_context": ddls_context,
         }
 
@@ -105,12 +104,12 @@ class SQLAgentGraph:
         return {"prompt": prompt}
 
     async def llm_node(self, state: AgentState):
-        schema_mapping = state["schema_mapping"]
+        schemas_mapping = state["schemas_mapping"]
         prompt = state["prompt"]
 
         logger.info("Getting started of llm")
 
-        llm = self.llm_wrapper.get_chain(schema_mapping)
+        llm = self.llm_wrapper.get_chain(schemas_mapping)
         query = await llm.ainvoke(prompt)
 
         logger.info(f"Generated query: {query}")
@@ -128,10 +127,13 @@ class SQLAgentGraph:
             }
         else:
             logger.error("An invalid request was generated. Start correction")
+            
+            raw_error = str(result_of_query["error"])
+            clean_error = raw_error.split("[SQL:")[0].strip()
 
             return {
                 "error_query": result_of_query["query"],
-                "error_from_db": result_of_query["error"],
+                "error_from_db": clean_error,
                 "retry_count": state["retry_count"] + 1,
                 "status": "error"
             }

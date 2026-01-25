@@ -14,8 +14,28 @@ class Settings(BaseSettings):
     DB_NAME: str
 
     VECTOR_DB_PATH: str = str(BASE_DIR / "data")
-    MODEL_PATH: str = str(BASE_DIR / "models" / "Meta-Llama-3-8B-Instruct.Q4_K_M.gguf")
-    
+    MODELS: dict = {
+        "llm_1": {
+            "local_path": str(BASE_DIR / "models" / "Meta-Llama-3-8B-Instruct.Q4_K_M.gguf"),
+            "repo_id": "MaziyarPanahi/Meta-Llama-3-8B-Instruct-GGUF",
+            "filename": "Meta-Llama-3-8B-Instruct.Q4_K_M.gguf",
+        },
+        "llm_2": {
+            "local_path": str(BASE_DIR / "models" / "llama-3-sqlcoder-8b.Q4_K_M.gguf"), 
+            "repo_id": "SandLogicTechnologies/Llama-3-Sqlcoder-8B-GGUF",
+            "filename": "llama-3-sqlcoder-8b.Q4_K_M.gguf",
+        },
+        "reranker": {
+            "repo_id": "BAAI/bge-reranker-base",
+            "cache_path": str(BASE_DIR / "models" / "reranker")
+        },
+        "embedder": {
+            "repo_id": "BAAI/bge-m3",
+            "cache_path": str(BASE_DIR / "models" / "embedder")
+        }
+    }
+
+
     model_config = SettingsConfigDict(
         env_file=ENV_FILE,
         env_file_encoding='utf-8',

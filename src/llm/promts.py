@@ -1,20 +1,14 @@
 from jinja2 import Template
 from langchain_core.documents import Document
 
-SQL_PROMPT_TEMPLATE = """### System:
-You are a PostgreSQL expert. Use the provided database schema to write a SQL query.
-Output only the SQL query, without explanations. DO NOT use columns that are not explicitly listed in the schema for a given table. It is incredibly important to display only the data specified in the question, and absolutely nothing extra!!!  When writing a sql query, you must ensure that the columns you select correspond to their tables and schems. This is very important!!!
+SQL_PROMPT_TEMPLATE = """Generate a SQL query to answer this question: {{ question }}
+Output only the SQL query, without explanations. Ensure columns correspond to tables.
 
-### Context:
+DDL statements:
 {% for doc in documents %}
 {{ doc }}
----
-{% endfor %}
-
-### Question:
-{{ question }}
-
-### SQL:
+{% endfor %}<|eot_id|><|start_header_id|>assistant<|end_header_id|>
+The following SQL query best answers the question {{ question }}:
 """
 
 class PromptManager:

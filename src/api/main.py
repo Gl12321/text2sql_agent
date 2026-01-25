@@ -12,7 +12,7 @@ from src.llm.promts import PromptManager
 from src.llm.wrapper import LLMWrapper
 from src.agent.executor import SQLExecutor
 from src.agent.corrector import SQLCorrector
-from src.llm.graph import SQLAgentGraph
+from src.agent.graph import SQLAgentGraph
 
 
 settings = get_settings()

@@ -21,7 +21,7 @@ async def rag_test():
 
     logger.info("Check semantic search")
 
-    test_query = "how match buildings in department and classrooms"
+    test_query = "Show the names of the stations and the number of available bikes at each of them"
 
     retriever = TableRetriever(
         collection=cataloger.table_collection,
@@ -34,7 +34,7 @@ async def rag_test():
 
     if search_results:
         for i, doc in enumerate(search_results):
-            logger.info(f"Top-{i + 1} result snippet: {doc.page_content}...")
+            logger.info(f"Top-{i + 1} result snippet: \n table: {doc.metadata["table_name"]} \n {doc.page_content}")
 
 
 if __name__ == "__main__":

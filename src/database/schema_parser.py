@@ -1,6 +1,8 @@
 from sqlalchemy import inspect, text
 from src.database.postgres_client import async_db
 from src.core.logger import setup_logger
+from sqlalchemy.schema import CreateTable
+from sqlalchemy import MetaData, Table
 
 logger = setup_logger("schema_parser")
 
@@ -20,7 +22,7 @@ class SchemaParser:
             result = await conn.execute(query)
             return [row[0] for row in result]
 
-    async def get_ddl_of_schema(self, schema_name: str) -> dict:
+    async def get_info_of_schema(self, schema_name: str) -> dict:
 
         def get_sync_info(connection):
             inspector = inspect(connection)
@@ -45,6 +47,24 @@ class SchemaParser:
         async with self.db_manager.engine.connect() as conn:
             return await conn.run_sync(get_sync_info)
 
+    async def get_ddl(self, schema_name, table_name):
+        def sync_get_ddl(connection):
+            logger.info(f"Create DDL for {schema_name}.{table_name}")
+
+            metadata = MetaData()
+            table = Table(
+                table_name,
+                metadata,
+                schema=schema_name,
+                autoload_with=connection
+            )
+
+            return str(CreateTable(table).compile(connection.engine))
+
+        async with self.db_manager.engine.connect() as conn:
+            return await conn.run_sync(sync_get_ddl)
+
+
 
 if __name__ == "__main__":
     import asyncio
@@ -56,9 +76,9 @@ if __name__ == "__main__":
         if schemas:
             test_schema = schemas[0]
             logger.info(f"Analyzing schema: {test_schema}")
-            ddl = await parser.get_ddl_of_schema(test_schema)
+            tables_metadata = await parser.get_info_of_schema(test_schema)
 
-            print(f"Structure for {test_schema}: {ddl}")
+            logger.info(f"parsed schema: {tables_metadata}")
 
 
     asyncio.run(main())
