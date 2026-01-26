@@ -2,7 +2,7 @@ services:
   db:
     image: postgres:16-alpine
     container_name: sql_agent_db
-    restart: no
+    restart: always
     environment:
       POSTGRES_USER: ${DB_USER}
       POSTGRES_PASSWORD: ${DB_PASSWORD}
@@ -15,6 +15,39 @@ services:
       resources:
         limits:
           memory: 256M
+
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: sql_agent_api
+    depends_on:
+      - db
+    volumes:
+      - .:/app
+      - ./models:/app/models
+      - ./data:/app/data
+    ports:
+      - "8000:8000"
+    environment:
+      - DATABASE_URL_SYNC=postgresql://${DB_USER}:${DB_PASSWORD}@db:5432/${DB_NAME}
+      - DATABASE_URL_ASYNC=postgresql+asyncpg://${DB_USER}:${DB_PASSWORD}@db:5432/${DB_NAME}
+    restart: always
+
+  ui:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: sql_agent_ui
+    depends_on:
+      - api
+    ports:
+      - "8501:8501"
+    volumes:
+      - ./frontend:/app
+    environment:
+      - API_URL=http://api:8000
+    restart: always
 
 volumes:
   postgres_data:
