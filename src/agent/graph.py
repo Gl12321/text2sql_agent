@@ -78,6 +78,7 @@ class SQLAgentGraph:
     async def retriever_node(self, state: AgentState):
         logger.info(f"start search by question: {state['question']}")
 
+        self.retriever.schemas_id = state["requested_schemes"]
         docs = await self.retriever.ainvoke(state["question"])
 
         tables = []
