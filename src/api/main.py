@@ -1,13 +1,16 @@
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
 from contextlib import asynccontextmanager
+import asyncio
 import psutil
 import os
 
 from src.core.logger import setup_logger
 from src.core.config import get_settings
+from src.database.schema_parser import SchemaParser
 from src.rag.embedder import TableEmbedder
 from src.rag.retriver import TableRetriever
+from src.rag.reranker import TableReranker
 from src.llm.promts import PromptManager
 from src.llm.wrapper import LLMWrapper
 from src.agent.executor import SQLExecutor
@@ -19,7 +22,16 @@ settings = get_settings()
 logger = setup_logger("API")
 state = {}
 
-test_db = "collage_2" #убрать после добавления коллектора
+def  schemas_for_search(requested_schemes=None):
+    if requested_schemes is not None:
+        return requested_schemes
+    else:
+        parser = SchemaParser()
+        all_schemas = asyncio.run(parser.get_all_schemas())
+        return all_schemas
+
+TOP_K = 10
+schemas_id = []
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -28,18 +40,19 @@ async def lifespan(app: FastAPI):
     logger.info(f"Memory before load: {memory_before_load:.2f} MB")
 
     embedder = TableEmbedder()
-    retriever = TableRetriever(                    #добавить коллекцию таблиц
+    retriever = TableRetriever(
         collection="table_collection",
         embedder=embedder,
-        db_id=test_db,
-        top_k=2
+        schemas_id=schemas_id,
+        top_k=TOP_K
     )
+    reranker = TableReranker()
     prompt_manager = PromptManager()
     llm_wrapper = LLMWrapper()
     executor = SQLExecutor()
     corrector = SQLCorrector()
 
-    agent = SQLAgentGraph(retriever, prompt_manager, llm_wrapper, executor, corrector)
+    agent = SQLAgentGraph(retriever, reranker, prompt_manager, llm_wrapper, executor, corrector)
     state["pipline"] = agent
 
     memory_after_load = process.memory_info().rss / 1024 / 1024
@@ -59,7 +72,7 @@ async def ask_sql(request: QueryRequest):
         agent = state["pipline"]
         initial_state = {
             "question": request.question,
-            "db_id": test_db,
+            "requested_schemes": schemas_for_search(),
             "retry_count": 0
         }
         final_state = await agent.graph.ainvoke(initial_state)

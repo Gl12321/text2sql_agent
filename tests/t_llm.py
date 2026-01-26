@@ -4,6 +4,7 @@ from src.rag.retriver import TableRetriever
 from src.llm.promts import PromptManager
 from src.core.logger import setup_logger
 from src.rag.embedder import TableEmbedder
+from src.rag.reranker import TableReranker
 from src.core.config import get_settings
 from src.llm.wrapper import LLMWrapper
 from src.agent.graph import SQLAgentGraph
@@ -16,10 +17,10 @@ config = get_settings()
 
 async def t_graph():
     test_questions_1 = [
-        "Show the names of the stations and the number of available bikes at each of them. Use join",
         "Find the names of all students in the Comp. Sci. department",
         "Find the names and salaries of instructors who earn more than 70000",
-        "Count the number of courses in each department. In the collage_2 schema"
+        "Count the number of courses in each department. In the collage_2 schema",
+        "Show the names of the stations and the number of available bikes at each of them.",
     ]
     
     parser = SchemaParser()
@@ -29,12 +30,13 @@ async def t_graph():
     embedder = TableEmbedder()
     client = chromadb.PersistentClient(config.VECTOR_DB_PATH)
     collection = client.get_collection("tables")
-    retriever = TableRetriever(collection=collection, embedder=embedder, schemas_id=all_schemas, top_k=5)
+    retriever = TableRetriever(collection=collection, embedder=embedder, schemas_id=all_schemas, top_k=10)
+    reranker = TableReranker()
     executor = SQLExecutor()
     corrector = SQLCorrector()
     wrapper = LLMWrapper()
 
-    agent = SQLAgentGraph(retriever, prompt_manager, wrapper, executor, corrector)
+    agent = SQLAgentGraph(retriever, reranker, prompt_manager, wrapper, executor, corrector)
 
     for i, question in enumerate(test_questions_1):
         logger.info(f"query {i+1}: {question}")
