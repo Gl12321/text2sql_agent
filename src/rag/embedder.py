@@ -1,9 +1,10 @@
 from sentence_transformers import SentenceTransformer
 from src.core.logger import setup_logger
 from src.core.config import get_settings
+import asyncio
 
 
-logger = setup_logger("embedder")
+logger = setup_logger("EMBEDDER")
 settings = get_settings()
 
 
@@ -22,11 +23,13 @@ class TableEmbedder:
         )
         logger.info("Model loaded")
 
-    def get_embeddings(self, serialized_tables):
-        embeddings = self.model.encode(
-            serialized_tables,
-            normalize_embeddings=True,
-            show_progress_bar=False
+    async def get_embeddings(self, serialized_tables):
+        loop = asyncio.get_running_loop()
+        return await loop.run_in_executor(
+            None,
+            lambda: self.model.encode(
+                serialized_tables,
+                normalize_embeddings=True,
+                show_progress_bar=False
+            )
         )
-
-        return embeddings

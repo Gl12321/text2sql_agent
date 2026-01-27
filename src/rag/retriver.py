@@ -1,4 +1,5 @@
 from typing import Any
+import asyncio
 from langchain_core.retrievers import BaseRetriever
 from langchain_core.documents import Document
 from langchain_core.callbacks import CallbackManagerForRetrieverRun
@@ -14,7 +15,11 @@ class TableRetriever(BaseRetriever):
     top_k: int
 
     def _get_relevant_documents(self, query: str, *, run_manager: CallbackManagerForRetrieverRun):
-        query_embedding = self.embedder.get_embeddings([query])[0]
+        raise NotImplementedError("Need use ainvoke()")
+
+    async def _aget_relevant_documents(self, query: str, *, run_manager: CallbackManagerForRetrieverRun):
+        embeddings = await self.embedder.get_embeddings([query])
+        query_embedding = embeddings[0]
         filter_schemas = {"schema_id": {"$in": self.schemas_id}}
 
         results = self.collection.query(
@@ -22,7 +27,7 @@ class TableRetriever(BaseRetriever):
             n_results=self.top_k,
             where=filter_schemas,
         )
-        logger.info(f"Found tables of retriever: {results["ids"]}")
+        logger.info(f"Found tables of retriever: {results['ids']}")
         
         documents = []
 

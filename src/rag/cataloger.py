@@ -1,5 +1,7 @@
 import asyncio
 import chromadb
+import shutil
+import os
 from src.database.schema_parser import SchemaParser
 from src.core.logger import setup_logger
 from src.rag.embedder import TableEmbedder
@@ -8,7 +10,7 @@ from src.core.config import get_settings
 
 
 config = get_settings()
-logger = setup_logger("Cataloger")
+logger = setup_logger("CATALOGER")
 
 class SchemaCataloger:
     def __init__(self, db_path=config.VECTOR_DB_PATH):
@@ -61,7 +63,7 @@ class SchemaCataloger:
                 "serialized_table": serialized_table
             })
 
-        embeddings = self.table_embedder.get_embeddings(serialized_tables)
+        embeddings = await self.table_embedder.get_embeddings(serialized_tables)
         self.add_tables_to_store(schema_id, table_names, documents_of_ddl, embeddings, metadatas)
 
         logger.info(f"Successfully indexed {len(table_names)} tables for {schema_id}")
@@ -71,16 +73,14 @@ class SchemaCataloger:
         for schema in schemes:
             await self.index_schema(schema)
 
-    def reset_store(self):
-        self.client.delete_collection(name="tables")
+    async def reset_store(self):
+        try:
+            self.client.delete_collection(name="tables")
+        except:
+            pass
+        
         self.table_collection = self.client.get_or_create_collection(
             name="tables",
             metadata={"hnsw:space": "cosine"}
         )
-        logger.info("Vector store has been reset (collection 'tables' deleted and recreated).")
-
-
-if __name__ == "__main__":
-    cataloger = SchemaCataloger()
-    cataloger.reset_store()
-    asyncio.run(cataloger.index_all_schemas())
+        logger.info("Vector store reset complete.")
