@@ -1,58 +1,70 @@
-Title & Header
+                                                    SQL Agent
 
-    Название проекта: (например, Enterprise SQL Agent)
+    Brief Description: AI agent for generating SQL queries for relational databases with a self-correction mechanism 
+                       and a metadata-based RAG system, designed for local operation on CPU.
 
-    Краткое описание: для работы локально на cpu AI-агент для генерации SQL-запросов к сложным реляционным базам данных с механизмом самокоррекции и RAG-системой на базе метаданных.
-
-    Технологический стек: Python 3.12 | FastAPI | LangGraph | SQLAlchemy 2.0 | ChromaDB | Llama-3 (GGUF).
+    Stack: Python 3.12 | FastAPI | LangGraph | Llama-cpp-python (GGUF/CPU) | SQLAlchemy | PostgreSQL | ChromaDB | Sentence-Transformers | Streamlit | Docker |
+    
+    Architecture: DB(Postgres) -> RAG(Chroma) -> LLM(Llama-3-8B-Instruct tuned_for_sql) -> Agent(LangGraph) -> API(FastAPI) -> Frontend(Streamlit)
 
 Key Modules & Technical Features
-
     Database Layer (src/database)
-        Реализованный уровень базы данных обеспечивает полный цикл обработки метаданных:
-        от автоматизированной миграции в SchemaMigration (migration.py) из SQLite в PostgreSQL
-        с восстановлением реляционной целостности до инспекции схем через асинхронный клиент PostgresClient
-        (postgres_client.py) на базе SQLAlchemy 2.0 с использованием паттернов Singleton и Connection Pooling
-        для эффективного управления конкурентными запросами. Модуль SchemaParser (schema_parser.py)
-        реализует динамическую генерацию DDL-описания таблиц и карты связей через run_sync инспекцию
-        для подачи в промпт, а также текстовое представление схемы для подачи в модули Embedding и Reranker.
+        The implemented database layer provides a full metadata processing cycle: 
+        from automated migration in SchemaMigration (migration.py) from SQLite to PostgreSQL 
+        with restoration of relational integrity, to schema inspection via the asynchronous PostgresClient 
+        (postgres_client.py) based on SQLAlchemy 2.0 using Singleton and Connection Pooling patterns 
+        for efficient concurrent request management. The SchemaParser module (schema_parser.py) 
+        implements dynamic generation of DDL table descriptions and relationship maps via run_sync inspection 
+        for prompt feeding, as well as text schema representations for the Embedding and Reranker modules.
 
     RAG & Schema Discovery (src/rag)
-        Реализован двухэтапный конвейер извлечения контекста (Retrieval-Augmented Generation),
-        оптимизированный для работы с многосхемными БД. На первом этапе TableRetriever (retriver.py)
-        выполняет семантический поиск по векторному хранилищу ChromaDB с использованием эмбеддингов
-        TableEmbedder (embedder.py), фильтруя таблицы по schema_id для соблюдения изоляции данных.
-        Полученные результаты обрабатываются TableReranker (reranker.py), который на основе
-        прямой оценки пары «вопрос-структура» отсеивает нерелевантные таблицы, оставляя в контексте
-        только те сущности, которые необходимы для построения конкретного SQL-запроса.
-        Модуль SchemaCataloger (cataloger.py) отвечает за индексацию, используя TableSerializer (serializer.py)
-        для подготовки текстовых представлений схем. Это позволяет минимизировать шум в промпте и снизить риск
-        галлюцинаций LLM при генерации сложных JOIN соединений.
+        A two-stage context extraction pipeline (Retrieval-Augmented Generation) has been implemented, 
+        optimized for working with multi-schema databases. At the first stage, TableRetriever (retriver.py) 
+        performs semantic search across the ChromaDB vector store using TableEmbedder (embedder.py) 
+        embeddings, filtering tables by schema_id to maintain data isolation. 
+        The obtained results are processed by TableReranker (reranker.py), which, based on 
+        a direct evaluation of the "question-structure" pair, filters out irrelevant tables, leaving in context 
+        only those entities necessary for building a specific SQL query. 
+        The SchemaCataloger module (cataloger.py) is responsible for indexing, using TableSerializer (serializer.py) 
+        to prepare text schema representations. This minimizes noise in the prompt and reduces the risk 
+        of LLM hallucinations when generating complex JOIN connections.
 
     Agent Logic & Self-Correction (src/agent)
-        Логика работы системы реализована в виде графа состояний на базе LangGraph (graph.py),
-        где ключевым этапом является совмещение автономного цикла исправления и жесткого синтаксического контроля.
-        Через динамические GBNF-грамматики SQLGrammarBuilder (src/llm/grammar.py), которые ограничивают
-        пространство вывода LLM только существующими в схеме таблицами и столбцами, исключается галлюцинация на этапе генерации.
-        В случае возникновения ошибок выполнения, SQLExecutor (executor.py) задействует SQLCorrector (corrector.py)
-        для активации Self-Correction Loop, анализируя трейсбэк PostgreSQL для итеративной правки кода.
-        Условные переходы позволяют системе валидировать контекст и прерывать выполнение при нерелевантности данных,
-        обеспечивая надежность и предсказуемость финального SQL-запроса. Инициализация моделей и инференс
-        инкапсулированы в LLMWrapper с использованием шаблонов PromptManager.
+        The system's operation logic is implemented as a state graph based on LangGraph (graph.py), 
+        where the key stage is combining an autonomous correction cycle with strict syntax control. 
+        Through dynamic GBNF grammars in SQLGrammarBuilder (src/llm/grammar.py), which restrict 
+        the LLM output space only to tables and columns existing in the schema, hallucinations are eliminated during the generation stage. 
+        In case of execution errors, SQLExecutor (executor.py) engages SQLCorrector (corrector.py) 
+        to activate the Self-Correction Loop, analyzing the PostgreSQL traceback for iterative code adjustment. 
+        Conditional transitions allow the system to validate context and abort execution if data is irrelevant, 
+        ensuring the reliability and predictability of the final SQL query. Model initialization and inference 
+        are encapsulated in LLMWrapper using PromptManager templates.
 
-Implementation Details
-
-    Async/Sync Hybrid: Полностью асинхронный пайплайн обработки запросов, через SQLAlchemy 
-    Local LLM Inference: Работа с GGUF-моделями через llama-cpp-python в LLMWrapper (wrapper.py).
-    Docker-native: Оркестрация через Docker Compose: изолированные контейнеры для PostgreSQL, Frontend и Core-приложения
+Implementation Details: 
+    Async/Sync Hybrid: Fully asynchronous request processing pipeline via SQLAlchemy. 
+    Local LLM Inference: Working with GGUF models via llama-cpp-python. 
+    Docker-native: Orchestration via Docker Compose: isolated containers for PostgreSQL, Frontend, and the Core application.
 
 Deployment & Quick Start
+    System requirements for stable operation (Llama-3 8B Q4 + Embedder + Reranker):
+        CPU: 8 cores
+        RAM: minimum 8 GB (16 GB+ recommended).
+        Disk: ~15 GB free space (model weights + indices).
+        OS: Linux / macOS / Windows (Docker Desktop).
 
-    Предварительные требования: Наличие весов моделей в папке models/ (или запуск скрипта загрузки).
+    Environment preparation:
+        Create a .env file in the project root:
+            DB_USER=admin
+            DB_PASSWORD=qwer1234
+            DB_HOST=db (or localhost for local run)
+            DB_PORT=5432
+            
+        Install dependencies: pip install -r requirements.txt
+        Download weights: python download_models.py
+        Build images: docker-compose up --build
 
-    Запуск:
-    Bash
+    Run:
+        docker-compose up
 
-    docker-compose up --build
-
-    UI: Ссылка на Streamlit интерфейс (localhost:8501).
+        UI (Streamlit): http://localhost:8501 — main terminal.
+        API (Swagger): http://localhost:8000/docs — endpoint verification.
