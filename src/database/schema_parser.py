@@ -23,7 +23,6 @@ class SchemaParser:
             return [row[0] for row in result]
 
     async def get_info_of_schema(self, schema_name: str) -> dict:
-
         def get_sync_info(connection):
             inspector = inspect(connection)
             tables = inspector.get_table_names(schema=schema_name)
@@ -64,21 +63,12 @@ class SchemaParser:
         async with self.db_manager.engine.connect() as conn:
             return await conn.run_sync(sync_get_ddl)
 
+    async def drop_schema(self, schema_name: str):
+        async with self.db_manager.engine.begin() as conn:
+            await conn.execute(text(f'DROP SCHEMA IF EXISTS "{schema_name}" CASCADE'))
+            logger.info(f"{schema_name} dropped")
 
-
-if __name__ == "__main__":
-    import asyncio
-    async def main():
-        parser = SchemaParser()
-        schemas = await parser.get_all_schemas()
-        logger.info(f"Available schemas: {schemas}")
-
-        if schemas:
-            test_schema = schemas[0]
-            logger.info(f"Analyzing schema: {test_schema}")
-            tables_metadata = await parser.get_info_of_schema(test_schema)
-
-            logger.info(f"parsed schema: {tables_metadata}")
-
-
-    asyncio.run(main())
+    async def drop_all_schemas(self):
+        all_schemas = await self.get_all_schemas()
+        for schema in all_schemas:
+            await self.drop_schema(schema)

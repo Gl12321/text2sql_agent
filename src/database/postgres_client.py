@@ -3,7 +3,7 @@ from src.core.config import get_settings
 from src.core.logger import setup_logger
 
 
-logger = setup_logger("postgres_client")
+logger = setup_logger("POSTGRES_CLIENT")
 settings = get_settings()
 
 class PostgresClient:
