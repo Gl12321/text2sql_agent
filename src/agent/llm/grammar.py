@@ -49,7 +49,6 @@ class SQLGrammarBuilder:
             f'tablename ::= {tablename_rule}',
             f'qualifiedCol ::= {qualified_col_rule}',
             f'anyCol ::= {any_col_rule}',
-
             "\n".join(table_specific_rules),
 
             'expr ::= term ( " " binop " " term )*',

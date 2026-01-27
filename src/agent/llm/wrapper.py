@@ -33,7 +33,6 @@ class LLMWrapper:
                     **self.model_config["params"],
                     grammar=grammar_text
                 )
-                
         return llm
 
 
