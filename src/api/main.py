@@ -13,11 +13,12 @@ from src.core.logger import setup_logger, AsyncLogHandler
 from src.core.config import get_settings
 from src.database.migration import DatabaseMigration
 from src.database.schema_parser import SchemaParser
+from src.rag.cataloger import SchemaCataloger
 from src.rag.embedder import TableEmbedder
 from src.rag.retriver import TableRetriever
 from src.rag.reranker import TableReranker
-from src.llm.promts import PromptManager
-from src.llm.wrapper import LLMWrapper
+from src.agent.llm.prompts import PromptManager
+from src.agent.llm.wrapper import LLMWrapper
 from src.agent.executor import SQLExecutor
 from src.agent.corrector import SQLCorrector
 from src.agent.graph import SQLAgentGraph
@@ -34,14 +35,17 @@ async def lifespan(app: FastAPI):
     memory_before_load = process.memory_info().rss / 1024 / 1024
     logger.info(f"Memory before load: {memory_before_load:.2f} MB")
 
-    migrator = DatabaseMigration()
+    schema_migrator = DatabaseMigration()
     schema_manager = SchemaParser()
-    app.state.schema_migrator = migrator
+    schema_cataloger = SchemaCataloger()
+    app.state.schema_migrator = schema_migrator
     app.state.schema_manager = schema_manager
+    app.state.schema_cataloger = schema_cataloger
+    tables_collection_obj = schema_cataloger.table_collection
 
     embedder = TableEmbedder()
     retriever = TableRetriever(
-        collection="table_collection",
+        collection=tables_collection_obj,
         embedder=embedder,
         schemas_id=[],
         top_k=TOP_K
@@ -86,25 +90,30 @@ async def load_schema(request: Request, files: list[UploadFile] = File(...)):
                     buffer.write(content)
 
             schema_id = os.path.splitext(file.filename)[0]
-            
+
             if asyncio.iscoroutinefunction(request.app.state.schema_migrator.migrate_db):
                  await request.app.state.schema_migrator.migrate_db(schema_id, target_path)
             else:
                  request.app.state.schema_migrator.migrate_db(schema_id, target_path)
-            
             loaded_schemas.append(schema_id)
-            
+
+            await request.app.state.schema_cataloger.index_schema(schema_id)
         return {"status": "success", "loaded_schemas": loaded_schemas}
 
     except Exception as e:
         logger.error(f"Error loading schema: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
+@app.post("/drop_all_schemas")
+async def drop_all_schemas(request: Request):
+    await request.app.state.schema_manager.drop_all_schemas()
+    await request.app.state.schema_cataloger.reset_store()
 
 @app.post("/schema_show")
 async def schema_show(request: Request):
-    return await request.app.state.schema_manager.get_all_schemas()
-
+    schemas = await request.app.state.schema_manager.get_all_schemas()
+    return {"schemas": schemas}
+    
 @app.post("/question/stream")
 async def ask_sql(request: Request, query_data: QueryRequest):
     log_queue = asyncio.Queue()
@@ -140,7 +149,6 @@ async def ask_sql(request: Request, query_data: QueryRequest):
                 "content": {
                     "question": query_data.question,
                     "status": final_state["status"],
-                    "sql": final_state.get("query"),
                     "data": final_state.get("result_from_db")
                 }
             }
@@ -153,3 +161,4 @@ async def ask_sql(request: Request, query_data: QueryRequest):
             logging.getLogger().removeHandler(handler)
 
     return StreamingResponse(stream_generator(), media_type="application/x-ndjson")
+    
