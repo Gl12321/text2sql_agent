@@ -27,15 +27,21 @@ with st.sidebar:
             st.rerun()
 
     if st.button("Show schemas"):
-        r = requests.post(f"{API_URL}/schema_show", json={"show_schemas": "all"})
+        r = requests.post(f"{API_URL}/schema_show")
         if r.status_code == 200:
             schemas = "\n".join(r.json().get("schemas", []))
-            st.session_state.full_logs += f"\n[SCHEMAS]:\n{schemas}\n"
+            st.session_state.full_logs += f"[SCHEMAS]: {schemas} "
         st.rerun()
 
     if st.button("Clear History"):
         st.session_state.full_logs = "> Logs cleared."
         st.session_state.last_df = None
+        st.rerun()
+
+    if st.button("Drop all schemas"):
+        r = requests.post(f"{API_URL}/drop_all_schemas")
+        if r.status_code == 200:
+            st.session_state.full_logs += f"\nAll schemas dropped\n"
         st.rerun()
 
 st.subheader("Process Monitor")
@@ -64,14 +70,14 @@ if question := st.chat_input("Write question to DB"):
 
                     if event == "log":
                         st.session_state.full_logs += f"[TASK] {content}\n"
-                    elif event == "sql":
-                        st.session_state.full_logs += f"[SQL] {content}\n"
                     elif event == "result":
-                        df = pd.DataFrame(content['data'])
-                        st.session_state.last_df = df
-                        st.session_state.full_logs += "> Query execution successful.\n"
+                        if content.get('data'):
+                            st.session_state.last_df = pd.DataFrame(content['data'])
+                        st.session_state.full_logs += f"> Finished with status: {content.get('status')}\n"
 
                     log_terminal.code(st.session_state.full_logs, language="text")
+
+            st.rerun()
 
     except Exception as e:
         error_msg = f"[ERROR] {str(e)}"
