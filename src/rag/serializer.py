@@ -1,6 +1,7 @@
 from src.core.logger import setup_logger
 
-logger = setup_logger("serializer")
+
+logger = setup_logger("SERIALIZER")
 
 class TableSerializer:
     def __call__(self, table_metadata: dict) -> str:
