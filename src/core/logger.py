@@ -1,4 +1,5 @@
 import logging
+import asyncio
 import sys
 
 def setup_logger(name) -> logging.Logger:
@@ -19,3 +20,16 @@ def setup_logger(name) -> logging.Logger:
     logger.addHandler(handler)
 
     return logger
+
+class AsyncLogHandler(logging.Handler):
+    def __init__(self, queue):
+        super().__init__()
+        self.queue = queue
+        self.loop = asyncio.get_running_loop()
+
+    def emit(self, record):
+        try:
+            msg = self.format(record)
+            self.loop.call_soon_threadsafe(self.queue.put_nowait, msg)
+        except Exception:
+            self.handleError(record)
