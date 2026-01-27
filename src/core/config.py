@@ -9,11 +9,13 @@ ENV_FILE = os.path.join(BASE_DIR, ".env")
 class Settings(BaseSettings):
     DB_USER: str
     DB_PASSWORD: str
-    DB_HOST: str = "localhost"
+    DB_HOST: str = "db"
     DB_PORT: int = 5432
     DB_NAME: str
 
-    VECTOR_DB_PATH: str = str(BASE_DIR / "data")
+    VECTOR_DB_PATH: str = str(BASE_DIR / "data"/ "chromadb")
+    SQLITE_PATH: str = str(BASE_DIR / "data" / "sqlite_storage")
+
     MODELS: dict = {
         "llm_1": {
             "local_path": str(BASE_DIR / "models" / "Meta-Llama-3-8B-Instruct.Q4_K_M.gguf"),
@@ -21,9 +23,19 @@ class Settings(BaseSettings):
             "filename": "Meta-Llama-3-8B-Instruct.Q4_K_M.gguf",
         },
         "llm_2": {
-            "local_path": str(BASE_DIR / "models" / "llama-3-sqlcoder-8b.Q4_K_M.gguf"), 
             "repo_id": "SandLogicTechnologies/Llama-3-Sqlcoder-8B-GGUF",
             "filename": "llama-3-sqlcoder-8b.Q4_K_M.gguf",
+            "params": {
+                "model_path": str(BASE_DIR / "models" / "llama-3-sqlcoder-8b.Q4_K_M.gguf"),
+                "temperature": 0.0,
+                "max_tokens": 512,
+                "n_ctx": 8192,
+                "n_batch": 1024,
+                "verbose": False,
+                "n_gpu_layers": 0,
+                "n_threads": 5,
+                "n_threads_batch": 5,
+            }
         },
         "reranker": {
             "repo_id": "BAAI/bge-reranker-base",
