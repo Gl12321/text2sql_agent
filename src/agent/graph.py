@@ -50,7 +50,14 @@ class SQLAgentGraph:
 
         workflow.set_entry_point("retrieve")
         workflow.add_edge("retrieve", "reranker")
-        workflow.add_edge("reranker", "prompt_manager")
+        workflow.add_conditional_edges(
+            "reranker",
+            self.check_reranker_result,
+            {
+                "continue": "prompt_manager",
+                "stop": END
+            }
+        )
         workflow.add_edge("prompt_manager", "llm")
         workflow.add_edge("llm", "executor")
         workflow.add_conditional_edges(
@@ -75,17 +82,17 @@ class SQLAgentGraph:
         else:
             return "need_correct"
 
+    def check_reranker_result(self, state: AgentState):
+        if state.get("status") == "not_found":
+            return "stop"
+        return "continue"
+
     async def retriever_node(self, state: AgentState):
         logger.info(f"start search by question: {state['question']}")
 
         self.retriever.schemas_id = state["requested_schemes"]
-        docs = await self.retriever.ainvoke(state["question"])
-
-        tables = []
-        for doc in docs:
-            table_name = doc.metadata.get("schema_id") + "." + doc.metadata.get("table_name")
-            tables.append(table_name)
-
+        docs = await self.retriever.ainvoke(state["question"], run_manager=None)
+    
         return {
             "raw_documents": docs,
         }
@@ -95,6 +102,15 @@ class SQLAgentGraph:
         raw_documents = state["raw_documents"]
 
         relevant_documents = await self.reranker.rerank(question, raw_documents)
+
+        if not relevant_documents:
+            logger.warning("Reranker filtered out all tables. Nothing to process.")
+            return {
+                "status": "not_found",
+                "tables": [],
+                "ddls_context": [],
+                "schemas_mapping": {}
+            }
         tables = [doc.metadata.get("table_name") for doc in relevant_documents]
 
         ddls_context = []
@@ -121,7 +137,7 @@ class SQLAgentGraph:
         question = state["question"]
         retrieved_ddls = state["ddls_context"]
         prompt = self.prompt_manager.build_sql_prompt(question, retrieved_ddls)
-        
+
         logger.info(f"Prompt length in chars: {len(prompt)}")
         logger.info(f"Created  prompt: {prompt}")
 
@@ -168,7 +184,6 @@ class SQLAgentGraph:
         logger.info(f"started correction loop, {state['retry_count']} attempt")
 
         ddls_context = state["ddls_context"]
-        error_query = state["error_query"]
         error_msg = state["error_from_db"]
         question = state["question"]
         
