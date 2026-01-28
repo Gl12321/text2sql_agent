@@ -14,7 +14,7 @@
     (postgres_client.py) на базе SQLAlchemy 2.0 с использованием паттернов Singleton и Connection Pooling
     для эффективного управления конкурентными запросами. Модуль SchemaParser (schema_parser.py)
     реализует динамическую генерацию DDL-описания таблиц и карты связей через run_sync инспекцию
-    для подачи в промпт, а также текстовое представление схемы для подачи в модули Embedding и Reranker.
+    для подачи в промпт, а также текстовое представление схемы для подачи в модули Embedding и Reranker. 
 
 *RAG & Schema Discovery* (src/rag)
     Реализован двухэтапный конвейер извлечения контекста (Retrieval-Augmented Generation),

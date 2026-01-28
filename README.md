@@ -13,7 +13,7 @@
     with restoration of relational integrity, to schema inspection via the asynchronous PostgresClient 
     (postgres_client.py) based on SQLAlchemy 2.0 using Singleton and Connection Pooling patterns 
     for efficient concurrent request management. The SchemaParser module (schema_parser.py) 
-    implements dynamic generation of DDL table descriptions and relationship maps via run_sync inspection 
+    implements dynamic generation of DDL table descriptions and relationship maps via run_sync inspection  
     for prompt feeding, as well as text schema representations for the Embedding and Reranker modules.
 
 *RAG & Schema Discovery* (src/rag)
