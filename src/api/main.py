@@ -2,7 +2,11 @@ from fastapi import FastAPI, HTTPException, UploadFile, File, Request
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 from contextlib import asynccontextmanager
+import asyncio
+from concurrent.futures import ProcessPoolExecutor
+from functools import partial
 from typing import Union
+from functools import wraps
 import json
 import asyncio
 import logging
@@ -27,7 +31,7 @@ from src.agent.graph import SQLAgentGraph
 settings = get_settings()
 logger = setup_logger("API")
 
-TOP_K = 10
+executor = ProcessPoolExecutor(max_workers=2)
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -48,7 +52,7 @@ async def lifespan(app: FastAPI):
         collection=tables_collection_obj,
         embedder=embedder,
         schemas_id=[],
-        top_k=TOP_K
+        top_k=10
     )
     reranker = TableReranker()
     prompt_manager = PromptManager()
@@ -60,11 +64,12 @@ async def lifespan(app: FastAPI):
     app.state.pipline = agent
 
     memory_after_load = process.memory_info().rss / 1024 / 1024
-    logger.info(f"Memory after load {memory_after_load} MB different:"
-                f" {memory_after_load - memory_before_load}")
+    logger.info(f"Memory after load {memory_after_load:.2f} MB. "
+                f"Diff: {memory_after_load - memory_before_load:.2f} MB")
+
     yield
 
-app = FastAPI(title="Enterprise SQL Agent", lifespan=lifespan)
+app = FastAPI(title="SQL Agent", lifespan=lifespan)
 
 class QueryRequest(BaseModel):
     question: str
@@ -73,10 +78,10 @@ class QueryRequest(BaseModel):
 @app.post("/load_schema")
 async def load_schema(request: Request, files: list[UploadFile] = File(...)):
     storage_path = settings.SQLITE_PATH
-
     if not os.path.exists(storage_path):
         os.makedirs(storage_path, exist_ok=True)
 
+    loop = asyncio.get_running_loop()
     try:
         loaded_schemas = []
         for file in files:
@@ -84,17 +89,18 @@ async def load_schema(request: Request, files: list[UploadFile] = File(...)):
                 continue
 
             target_path = os.path.join(storage_path, file.filename)
-
             with open(target_path, "wb") as buffer:
                 while content := await file.read(1024 * 1024):
                     buffer.write(content)
 
             schema_id = os.path.splitext(file.filename)[0]
 
-            if asyncio.iscoroutinefunction(request.app.state.schema_migrator.migrate_db):
-                 await request.app.state.schema_migrator.migrate_db(schema_id, target_path)
-            else:
-                 request.app.state.schema_migrator.migrate_db(schema_id, target_path)
+            migration_func = partial(
+                request.app.state.schema_migrator.migrate_db,
+                schema_id,
+                target_path
+            )
+            await loop.run_in_executor(executor, migration_func)
             loaded_schemas.append(schema_id)
 
             await request.app.state.schema_cataloger.index_schema(schema_id)
@@ -104,12 +110,12 @@ async def load_schema(request: Request, files: list[UploadFile] = File(...)):
         logger.error(f"Error loading schema: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
-@app.post("/drop_all_schemas")
+@app.delete("/drop_all_schemas")
 async def drop_all_schemas(request: Request):
     await request.app.state.schema_manager.drop_all_schemas()
     await request.app.state.schema_cataloger.reset_store()
 
-@app.post("/schema_show")
+@app.get("/schema_show")
 async def schema_show(request: Request):
     schemas = await request.app.state.schema_manager.get_all_schemas()
     return {"schemas": schemas}
@@ -121,7 +127,7 @@ async def ask_sql(request: Request, query_data: QueryRequest):
     handler.setFormatter(logging.Formatter("%(asctime)s | %(levelname)s | %(name)s | %(message)s", "%H:%M:%S"))
 
     logging.getLogger().addHandler(handler)
-    
+
     if query_data.schemas_for_search == "all":
         query_data.schemas_for_search = await request.app.state.schema_manager.get_all_schemas()
 
