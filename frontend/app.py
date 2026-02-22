@@ -27,7 +27,7 @@ with st.sidebar:
             st.rerun()
 
     if st.button("Show schemas"):
-        r = requests.post(f"{API_URL}/schema_show")
+        r = requests.get(f"{API_URL}/schema_show")
         if r.status_code == 200:
             schemas = "\n".join(r.json().get("schemas", []))
             st.session_state.full_logs += f"[SCHEMAS]: {schemas} "
@@ -39,7 +39,7 @@ with st.sidebar:
         st.rerun()
 
     if st.button("Drop all schemas"):
-        r = requests.post(f"{API_URL}/drop_all_schemas")
+        r = requests.delete(f"{API_URL}/drop_all_schemas")
         if r.status_code == 200:
             st.session_state.full_logs += f"\nAll schemas dropped\n"
         st.rerun()
