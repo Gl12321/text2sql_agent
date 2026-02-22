@@ -11,7 +11,7 @@ logger = setup_logger("RERANKER")
 settings = get_settings()
 
 class TableReranker:
-    def __init__(self, threshold: float = 0.03):
+    def __init__(self, threshold: float = 0.002):
         self.threshold = threshold
         self.model_name = settings.MODELS["reranker"]["repo_id"]
         self.cache_path = settings.MODELS["reranker"]["cache_path"]

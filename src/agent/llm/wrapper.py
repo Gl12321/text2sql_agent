@@ -23,15 +23,18 @@ class LLMWrapper:
                 local_dir=model_dir,
                 local_dir_use_symlinks=False
             )
+        self.model = self.get_chain()
+        self.grammar_builder = SQLGrammarBuilder()
+        logger.info("model loaded")
 
-    def get_chain(self, schema_mapping):
-        grammar_text = SQLGrammarBuilder.build(schema_mapping)
+    def get_grammar(self, schema_mapping):
+        return self.grammar_builder.build(schema_mapping)
 
+    def get_chain(self):
         with open(os.devnull, 'w') as fnull:
             with redirect_stdout(fnull), redirect_stderr(fnull):
                 llm = LlamaCpp(
                     **self.model_config["params"],
-                    grammar=grammar_text
                 )
         return llm
 

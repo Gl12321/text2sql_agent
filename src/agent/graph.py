@@ -1,12 +1,15 @@
 from langgraph.graph import StateGraph, END
 from langchain_core.documents import Document
 from typing import TypedDict
+from llama_cpp import LlamaGrammar
+import asyncio
 import time
 
 from src.core.logger import setup_logger
-
+from src.core.config import Settings
 
 logger = setup_logger("LangGraph")
+settings = Settings()
 
 class AgentState(TypedDict):
     question: str
@@ -146,14 +149,32 @@ class SQLAgentGraph:
     async def llm_node(self, state: AgentState):
         schemas_mapping = state["schemas_mapping"]
         prompt = state["prompt"]
+        loop = asyncio.get_running_loop()
 
         logger.info("Getting started of llm")
-
         start = time.time()
-        llm = self.llm_wrapper.get_chain(schemas_mapping)
-        end = time.time()
-        query = await llm.ainvoke(prompt)
 
+        grammar_text = self.llm_wrapper.get_grammar(schemas_mapping)
+        compiled_grammar = LlamaGrammar.from_string(grammar_text)
+
+        allowed_gen_params = {
+            "max_tokens", "temperature", "top_p", "top_k",
+            "repeat_penalty", "stop", "seed"
+        }
+        full_params = self.llm_wrapper.model_config["params"]
+        gen_params = {k: v for k, v in full_params.items() if k in allowed_gen_params}
+
+        response = await loop.run_in_executor(
+            None,
+            lambda: self.llm_wrapper.model.client.create_completion(
+                prompt=prompt,
+                grammar=compiled_grammar,
+                **gen_params
+            )
+        )
+        end = time.time()
+
+        query = response["choices"][0]["text"]
         logger.info(f"Generated query: {query} \n execution time: {end - start}")
 
         return {"query": query}
